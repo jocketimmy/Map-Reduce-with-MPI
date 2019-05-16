@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	//Call init func here
+	init(argv[optind], argv[optind + 1]);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 	for (int i = 0; i < repeat; i++) {
