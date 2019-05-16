@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (argv[optind] == NULL || argv[optind + 1] == NULL || argv[optind + 2] == NULL) {
+	if (argv[optind] == NULL || argv[optind + 1] == NULL) {
 		if (world_rank == 0) print_usage(argv[0]);
 		MPI_Finalize();
 		exit(1);
@@ -73,5 +73,5 @@ int main(int argc, char *argv[]) {
 }
 
 void print_usage(char *program) {
-	fprintf(stderr, "Usage: %s [Matrix A] [Matrix B] [Output Matrix C]\n", program);
+	fprintf(stderr, "Usage: %s [Inputfile] [Outputfile]\n", program);
 }
