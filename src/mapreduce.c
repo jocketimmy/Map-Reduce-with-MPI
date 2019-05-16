@@ -46,26 +46,24 @@ void cleanup() {
     return;
 }
 
+struct Tuple {
+    char* key;
+    int value;
+};
+
 void mapReduce() {
     const char space[4] = " \n\t";
-    const char newline[2] = "\n";
     char *token;
-    char *token2;
 
     token = strtok(config.receiveWords, space);
-
-    /*char* hejho[config.localFileSize];
-    for(int i = 0; i < config.localFileSize; i++){
-        hejho[i] = ' ';
-    }*/
 
     if(config.world_rank == 3){
         while(token != NULL){
             printf( " %s\n", token );
             token = strtok(NULL, space);
         }
-
     }
+
 
     return;
 }
