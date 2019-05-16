@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
 	int opt;
 	int world_rank;
 	int repeat = 1;
-	//void (*algorithm)() = &mapReduce;
+	void (*algorithm)() = &mapReduce;
 
 	double avg_runtime = 0.0, prev_avg_runtime = 0.0, stddev_runtime = 0.0;
 	double start_time, end_time;
@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
 		switch (opt) {
 			case 'f':
 				if (world_rank == 0) fprintf(stderr, "Hard work work\n");
-				//algorithm = &mapReduce;
+				algorithm = &mapReduce;
 				break;
 			case 'r':
 				repeat = atoi(optarg);
@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < repeat; i++) {
 		MPI_Barrier(MPI_COMM_WORLD);
 		start_time = MPI_Wtime();
-		// call  algo here - algorithm();
+		algorithm();
 		MPI_Barrier(MPI_COMM_WORLD);
 		end_time = MPI_Wtime();
 
