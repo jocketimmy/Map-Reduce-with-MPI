@@ -1,4 +1,3 @@
 testfiles/wikipedia_test_large.txt
 *.out
 *.vscode
-*.cpp
