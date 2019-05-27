@@ -43,13 +43,16 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	init(argv[optind], argv[optind + 1]);
+	//init(argv[optind], argv[optind + 1]);
+	collective_read(argv[optind], argv[optind + 1]);
+
+
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 	for (int i = 0; i < repeat; i++) {
 		MPI_Barrier(MPI_COMM_WORLD);
 		start_time = MPI_Wtime();
-		algorithm();
+		//algorithm();
 		MPI_Barrier(MPI_COMM_WORLD);
 		end_time = MPI_Wtime();
 
