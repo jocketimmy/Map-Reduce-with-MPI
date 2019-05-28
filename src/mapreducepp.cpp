@@ -10,6 +10,8 @@ typedef uint64_t Hash;
 const char           key_seed[SEED_LENGTH] = "b4967483cf3fa84a3a233208c129471ebc49bdd3176c8fb7a2c50720eb349461";
 const unsigned short *key_seed_num         = (unsigned short*)key_seed;
 
+struct Tuple;
+
 struct Config {
     // In and out files
     MPI_File inFileHandler, outFileHandler;
@@ -29,6 +31,8 @@ struct Config {
 
     std::unordered_map<std::string,int> realMap;
 
+    std::vector<std::vector<Tuple> > sendVec;
+
     MPI_Datatype block;
 
 };
@@ -40,6 +44,8 @@ void handleInput(MPI_Offset offset);
 void collective_read(char *inFileHandler, char *outFile) {
     MPI_Comm_rank(MPI_COMM_WORLD, &config.world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &config.world_size);
+    config.sendVec.resize(config.world_size);
+
     config.outFile = outFile;
     config.chunk = config.MB*sizeof(char);
 
@@ -104,6 +110,7 @@ void init(char *inFileHandler, char *outFile) {
     return;
     MPI_Comm_rank(MPI_COMM_WORLD, &config.world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &config.world_size);
+
     config.outFile = outFile;
     config.chunk = config.MB*sizeof(char);
 
@@ -178,11 +185,16 @@ void mapReduce() {
     std::unordered_map<std::string,int>::const_iterator it;
     //std::vector<std::vector<Tuple> > sendVec(config.world_size);
 
+
     int localFileSize = (config.localFileCount / 10) + 1;
-    char temp[11];
-    std::string strTmpz(temp);
+    //char temp[11];
+    //std::string strTmpz(temp);
 
     for(int i = 0; i < localFileSize; i++) {
+        char* temp = (char*) malloc(11*sizeof(char));
+
+        //std::cout << "loop" << i << std::endl;
+
         if(i == localFileSize-1 && config.localFileCount % 10 != 0) {
             for(int j = 0; j < 10; j++) {
                 temp[j] = ' ';
@@ -199,19 +211,49 @@ void mapReduce() {
             //std::cout << config.world_rank << " " << strTmp << std::endl;
         }
 
-        strTmpz = strTmp;
+        //strTmpz = strTmp;
         it = config.realMap.find(strTmp);
+
         if(it == config.realMap.end()) {
+
             //std::cout << "not found, you were looking for " << strTmp << std::endl;
-            config.realMap.insert({strTmp, 1});
+           // config.realMap.insert({strTmp, 1});
+            Hash hash = getHash(temp, 10);
+            int newHash = (int) (hash % config.world_size);
+            //std::cout << "RANK " << config.world_rank << " " << newHash << " " << config.sendVec[newHash].size() << std::endl;
+
+            //Tuple tempTuple;
+            //tempTuple.key = temp;
+            //tempTuple.value = 1;
+            config.sendVec[newHash].push_back(Tuple());
+
+            config.sendVec[newHash][config.sendVec[newHash].size()-1].key = temp;
+            config.sendVec[newHash][config.sendVec[newHash].size()-1].value = 1;
+            config.realMap.insert({strTmp, config.sendVec[newHash].size()-1});
+
         } else {
-            config.realMap[strTmp] += 1;
+            //std::cout << "found" << std::endl;
+
+            //config.realMap[strTmp] += 1;
             //std::cout << it->first << " yay found it " << it->second << std::endl;
+            int index = config.realMap[strTmp];
+            Hash hash = getHash(temp, 10);
+            int newHash = (int) (hash % config.world_size);
+            config.sendVec[newHash][index].value += 1;
+            //std::cout << "new value" << config.sendVec[newHash][index].value << std::endl;
+
         }
     }
     //std::cout << strTmpz << std::endl;
-
-
+    /*for(int i = 0; i < config.sendVec.size(); i++) {
+        std::cout << "rank " << i << std::endl;
+        for(int j = 0; j < config.sendVec[i].size(); j++) {
+            for(int k = 0; k < 10; k++) {
+                std::cout << config.sendVec[i][j].key[k];
+            }
+            std::cout << " value: " << config.sendVec[i][j].value << std::endl;
+        }
+    }*/
 
 
     //Hash hash = getHash(temp, 10);
@@ -268,4 +310,43 @@ void mapReduce() {
     std::cout << buffer.size() << std::endl;
 
     return;
+}
+
+
+void distribute() {
+		std::cout << "world size: " << config.world_size << std::endl;
+
+    MPI_Request request[config.world_size];
+	MPI_Status status[config.world_size];
+    int flags[config.world_size];
+    int counts[config.world_size] = {0};
+    int arr[10] = {7};
+    int receive[4];
+	std::cout << "rank is: " << config.world_rank << std::endl;
+
+    for(int i = 0; i < config.sendVec.size(); i++) {
+        MPI_Isend(&config.sendVec[i][0], config.sendVec[i].size()*14, MPI_CHAR, i, i, MPI_COMM_WORLD, &request[config.world_rank]);
+        //MPI_Iprobe(i, config.world_rank, MPI_COMM_WORLD, &flags[i], &status[i]);
+    }
+    for(int i = 0; i < config.sendVec.size(); i++) {
+        MPI_Probe(i, config.world_rank, MPI_COMM_WORLD, &status[i]);
+        MPI_Get_count(&status[i], MPI_CHAR, &counts[i]);
+        if(counts[i] != 0) {
+        	std::cout << "count is " << counts[i] << std::endl;
+
+            std::vector<Tuple> temp(counts[i] / 14);
+            MPI_Recv(&temp[0], counts[i], MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		    //std::cout << "temp vec value is" << temp[0].value << std::endl;
+
+            for(int j = 0; j < counts[i] / 14; j++) {
+		        std::cout << "temp vec value is" << temp[j].value << std::endl;
+            }
+
+            //MPI_Irecv(void *buffer, int count, MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD comm, MPI_STATUS_IGNORE);
+        }
+    }
+    /*for(int i = 0; i < config.sendVec.size(); i++) {
+        //MPI_Probe(i, i, MPI_COMM_WORLD, &status[i]);
+		std::cout << "flags here: " << flags[i] << std::endl;
+    }*/
 }

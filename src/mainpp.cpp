@@ -45,7 +45,9 @@ int main(int argc, char *argv[]) {
 
 	//init(argv[optind], argv[optind + 1]);
 	collective_read(argv[optind], argv[optind + 1]);
+    MPI_Barrier(MPI_COMM_WORLD);
 
+	distribute();
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
