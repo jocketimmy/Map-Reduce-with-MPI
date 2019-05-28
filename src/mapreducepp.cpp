@@ -153,7 +153,7 @@ void cleanup() {
 }
 
 struct Tuple {
-    char* key;
+    char key[11];
     char pad = 'x';
     int value;
 };
@@ -220,12 +220,15 @@ void mapReduce() {
             //std::cout << "RANK " << config.world_rank << " " << newHash << " " << config.sendVec[newHash].size() << std::endl;
 
             Tuple tempTuple;
-            tempTuple.key = temp;
+            for(int k = 0; k < 11; k++) {
+                tempTuple.key[k] = temp[k];
+            }
+            //tempTuple.key = temp;
             tempTuple.value = 1;
-            config.sendVec[newHash].push_back(Tuple());
+            config.sendVec[newHash].push_back(tempTuple);
 
-            config.sendVec[newHash][config.sendVec[newHash].size()-1].key = temp;
-            config.sendVec[newHash][config.sendVec[newHash].size()-1].value = 1;
+            //config.sendVec[newHash][config.sendVec[newHash].size()-1].key = temp;
+            //config.sendVec[newHash][config.sendVec[newHash].size()-1].value = 1;
             config.realMap.insert({strTmp, config.sendVec[newHash].size()-1});
         } else {
             //std::cout << "found" << std::endl;
@@ -309,7 +312,7 @@ void mapReduce() {
 }
 
 struct Tup {
-    char* key;
+    char key[11];
     char padd = 'x';
     //char padd2 = 'x';
     //char padd3 = 'x';
@@ -353,7 +356,7 @@ void distribute() {
         MPI_Get_count(&status[i], config.struct_type, &counts[i]);
 
         std::cout << config.world_rank << ", loop " << i << " count is " << counts[i] << std::endl;
-        if(counts[i] != 0 && config.world_rank == 2) {
+        if(counts[i] != 0 && config.world_rank == 0) {
         	std::cout << "count is " << counts[i] << std::endl;
             std::cout << "i is " << i << std::endl;
 
@@ -367,15 +370,15 @@ void distribute() {
 		    //std::cout << "temp vec value is" << temp[0].value << std::endl;
 
             for(int j = 0; j < (counts[i]); j++) {
-                for(int k = 0; k < 1; k++) {
-		        //    std::cout << temp[j].key;
+                for(int k = 0; k < 10; k++) {
+		            std::cout << temp[j].key[k];
                 }
                 char* temp2 = (char*) malloc(2*sizeof(char));
                 temp2[0] = 'T';
                 temp2[1] = 0;
                 //temp[j].key = temp2;
 		        std::cout << std::endl << "temp vec value is: " << temp[j].value << std::endl;
-                std::cout << temp[j].key;
+                //std::cout << temp[j].key[0];
             }
 
             //MPI_Irecv(void *buffer, int count, MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD comm, MPI_STATUS_IGNORE);
