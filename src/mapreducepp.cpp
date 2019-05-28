@@ -33,7 +33,7 @@ struct Config {
 
     std::vector<std::vector<Tuple> > sendVec;
 
-    MPI_Datatype block;
+    MPI_Datatype struct_type;
 
 };
 
@@ -153,11 +153,8 @@ void cleanup() {
 }
 
 struct Tuple {
-    /*Tuple(char* k, int v) {
-        key = k;
-        value = v;
-    }*/
     char* key;
+    char pad = 'x';
     int value;
 };
 
@@ -222,15 +219,14 @@ void mapReduce() {
             int newHash = (int) (hash % config.world_size);
             //std::cout << "RANK " << config.world_rank << " " << newHash << " " << config.sendVec[newHash].size() << std::endl;
 
-            //Tuple tempTuple;
-            //tempTuple.key = temp;
-            //tempTuple.value = 1;
+            Tuple tempTuple;
+            tempTuple.key = temp;
+            tempTuple.value = 1;
             config.sendVec[newHash].push_back(Tuple());
 
             config.sendVec[newHash][config.sendVec[newHash].size()-1].key = temp;
             config.sendVec[newHash][config.sendVec[newHash].size()-1].value = 1;
             config.realMap.insert({strTmp, config.sendVec[newHash].size()-1});
-
         } else {
             //std::cout << "found" << std::endl;
 
@@ -312,9 +308,16 @@ void mapReduce() {
     return;
 }
 
+struct Tup {
+    char* key;
+    char padd = 'x';
+    //char padd2 = 'x';
+    //char padd3 = 'x';
+    int value;
+};
 
 void distribute() {
-		std::cout << "world size: " << config.world_size << std::endl;
+	std::cout << "world size: " << config.world_size << std::endl;
 
     MPI_Request request[config.world_size];
 	MPI_Status status[config.world_size];
@@ -324,22 +327,55 @@ void distribute() {
     int receive[4];
 	std::cout << "rank is: " << config.world_rank << std::endl;
 
+    int blocksCount = 3;
+    int blocksLength[3] = {11, 1, 1};
+    MPI_Datatype types[3] = {MPI_CHAR, MPI_CHAR, MPI_INT};
+    MPI_Aint offsets[3];
+    offsets[0] = offsetof(Tup, key);
+    offsets[1] = offsetof(Tup, padd);
+    offsets[2] = offsetof(Tup, value);
+    //offsets[3] = offsetof(Tup, padd3);
+    //offsets[4] = offsetof(Tup, value);
+
+    MPI_Type_create_struct(blocksCount, blocksLength, offsets, types, &config.struct_type);
+    MPI_Type_commit(&config.struct_type);
+
+
     for(int i = 0; i < config.sendVec.size(); i++) {
-        MPI_Isend(&config.sendVec[i][0], config.sendVec[i].size()*14, MPI_CHAR, i, i, MPI_COMM_WORLD, &request[config.world_rank]);
+        MPI_Isend(&config.sendVec[i][0], config.sendVec[i].size(), config.struct_type, i, i, MPI_COMM_WORLD, &request[config.world_rank]);
+
+        //MPI_Isend(&config.sendVec[i][0], config.sendVec[i].size()*16, MPI_CHAR, i, i, MPI_COMM_WORLD, &request[config.world_rank]);
         //MPI_Iprobe(i, config.world_rank, MPI_COMM_WORLD, &flags[i], &status[i]);
     }
     for(int i = 0; i < config.sendVec.size(); i++) {
         MPI_Probe(i, config.world_rank, MPI_COMM_WORLD, &status[i]);
         MPI_Get_count(&status[i], MPI_CHAR, &counts[i]);
-        if(counts[i] != 0) {
-        	std::cout << "count is " << counts[i] << std::endl;
+        MPI_Get_count(&status[i], config.struct_type, &counts[i]);
 
-            std::vector<Tuple> temp(counts[i] / 14);
-            MPI_Recv(&temp[0], counts[i], MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        std::cout << config.world_rank << ", loop " << i << " count is " << counts[i] << std::endl;
+        if(counts[i] != 0 && config.world_rank == 2) {
+        	std::cout << "count is " << counts[i] << std::endl;
+            std::cout << "i is " << i << std::endl;
+
+            //std::vector<Tup> temp(counts[i] / 16);
+            std::vector<Tup> temp(counts[i]);
+
+            MPI_Recv(&temp[0], counts[i], config.struct_type, i, config.world_rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		    std::cout << "after receive" << std::endl;
+
+            //MPI_Recv(&temp[0], counts[i], MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		    //std::cout << "temp vec value is" << temp[0].value << std::endl;
 
-            for(int j = 0; j < counts[i] / 14; j++) {
-		        std::cout << "temp vec value is" << temp[j].value << std::endl;
+            for(int j = 0; j < (counts[i]); j++) {
+                for(int k = 0; k < 1; k++) {
+		        //    std::cout << temp[j].key;
+                }
+                char* temp2 = (char*) malloc(2*sizeof(char));
+                temp2[0] = 'T';
+                temp2[1] = 0;
+                //temp[j].key = temp2;
+		        std::cout << std::endl << "temp vec value is: " << temp[j].value << std::endl;
+                std::cout << temp[j].key;
             }
 
             //MPI_Irecv(void *buffer, int count, MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD comm, MPI_STATUS_IGNORE);
@@ -349,4 +385,5 @@ void distribute() {
         //MPI_Probe(i, i, MPI_COMM_WORLD, &status[i]);
 		std::cout << "flags here: " << flags[i] << std::endl;
     }*/
+    return;
 }
