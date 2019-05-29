@@ -32,6 +32,7 @@ struct Config {
     // Ranks
     int world_rank, world_size;
     int MB = 64000000;
+    MPI_Offset writeOffset = 0;
 
     std::unordered_map<std::string,int> realMap;
     std::unordered_map<std::string,int>::const_iterator it;
@@ -76,10 +77,30 @@ void collective_read(char *inFileHandler, char *outFile) {
         }
     }
     //MPI_File_close(&config.inFileHandler);
+    return;
 }
 
 void collective_write() {
+    MPI_Request request;
+    MPI_Offset tempOffset = 0;
+    if(config.world_rank == 0) {
+        tempOffset = config.sendVec[config.world_rank].size();
+        MPI_Isend(&tempOffset, 1, MPI_INT, config.world_rank + 1, 0, MPI_COMM_WORLD, &request);
+    }
+    else {
+        MPI_Recv(&config.writeOffset, 1, MPI_INT, config.world_rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        if(config.world_rank != config.world_size-1) {
+            tempOffset = config.writeOffset + config.sendVec[config.world_rank].size();
+            MPI_Isend(&tempOffset, 1, MPI_INT, config.world_rank + 1, 0, MPI_COMM_WORLD, &request);
+        }
+    }
+    //auto pointer = &config.sendVec[config.world_rank][0];
+    std::cout << "Rank: " << config.world_rank << ", Has offset: " << config.writeOffset << ", Will write: " << config.sendVec[config.world_rank].size() << std::endl;
+	MPI_File_open(MPI_COMM_WORLD, config.outFile, (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &config.outFileHandler);
+    //if(config.world_rank == 3) {
+    MPI_File_write_at(config.outFileHandler, config.writeOffset*16*sizeof(char), &config.sendVec[config.world_rank][0], config.sendVec[config.world_rank].size()*16, MPI_CHAR, MPI_STATUS_IGNORE);
 
+    //}
 }
 
 void handleInput(MPI_Offset offset) {
@@ -178,14 +199,14 @@ void reduce(char* temp, int val) {
         //config.sendVec[newHash][config.sendVec[newHash].size()-1].key = temp;
         //config.sendVec[newHash][config.sendVec[newHash].size()-1].value = 1;
         config.realMap.insert({strTmp, config.sendVec[newHash].size()-1});
-        std::cout << config.sendVec[newHash][config.sendVec[newHash].size()-1].value << " NO you did not found it, you wanted: " << strTmp << std::endl;
+        //std::cout << config.sendVec[newHash][config.sendVec[newHash].size()-1].value << " NO you did not found it, you wanted: " << strTmp << std::endl;
 
     } else {
         int index = config.realMap[strTmp];
         int newHash = getHash(temp, 10);
         config.sendVec[newHash][index].value += val;
-        std::cout << config.it->first << " yay found it " << config.it->second << std::endl;
-        std::cout << "new value" << config.sendVec[newHash][index].value << std::endl;
+        //std::cout << config.it->first << " yay found it " << config.it->second << std::endl;
+        //std::cout << "new value" << config.sendVec[newHash][index].value << std::endl;
     }
 }
 
@@ -230,13 +251,13 @@ void distribute() {
             }*/
         }
     }
-    if(config.world_rank == 2) {
+    /*if(config.world_rank == 2) {
         for(int i = 0; i < config.sendVec[config.world_rank].size(); i++) {
             for(int j = 0; j < 10; j++) {
                 std::cout << config.sendVec[config.world_rank][i].key[j];
             }
             std::cout << " " << config.sendVec[config.world_rank][i].value << std::endl;
         }
-    }
+    }*/
     return;
 }
