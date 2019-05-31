@@ -11,9 +11,15 @@ const unsigned short *key_seed_num         = (unsigned short*)key_seed;
 
 //struct Tuple;
 struct Tuple {
-    char key[11];
+    char key[11] = {' '};
     char padd = 'x';
     int value;
+};
+
+struct Tup {
+    char key[11];
+    char padd = ':';
+    char count = '7';
 };
 
 struct Config {
@@ -31,12 +37,13 @@ struct Config {
 
     // Ranks
     int world_rank, world_size;
-    int MB = 64000000;
+    int MB = 64*1024*1024;
     MPI_Offset writeOffset = 0;
 
     std::unordered_map<std::string,int> realMap;
     std::unordered_map<std::string,int>::const_iterator it;
     std::vector<std::vector<Tuple> > sendVec;
+    std::vector<Tup> printVec;
 
     MPI_Datatype struct_type;
 };
@@ -80,17 +87,65 @@ void collective_read(char *inFileHandler, char *outFile) {
     return;
 }
 
+const int numDigits(int number) {
+    int digits = 0;
+    while (number) {
+        number /= 10;
+        digits++;
+    }
+    return digits;
+}
+
 void collective_write() {
     MPI_Request request;
     MPI_Offset tempOffset = 0;
+    std::vector<char> print;
+    int totalbytes = 0;
+    for(int i = 0; i < config.sendVec[config.world_rank].size(); i++) {
+        for(int j = 0; j < 10; j++) {
+            print.push_back(config.sendVec[config.world_rank][i].key[j]);
+        }
+        print.push_back(':');
+        int count = config.sendVec[config.world_rank][i].value;
+        int countSize = numDigits(count);
+        countSize++;
+        char tempCount[countSize];
+        snprintf(tempCount, countSize, "%d", count);
+        for(int j = 0; j < strlen(tempCount); j++) {
+            print.push_back(tempCount[j]);
+            totalbytes++;
+        }
+        print.push_back('\n');
+        totalbytes += 12;
+    }
+
+    /*config.printVec.resize(config.sendVec[config.world_rank].size());
+    for(int i = 0; i < config.printVec.size(); i++) {
+        //std::cout << config.printVec.size() << " RANK " << config.world_rank << std::endl;
+        int count = config.sendVec[config.world_rank][i].value;
+        int countSize = numDigits(count);
+        countSize++;
+        char* temp = (char*) malloc(countSize*sizeof(char));
+        snprintf(temp, countSize, "%d\n", count);
+        std::cout << temp << std::endl;
+        Tup tempTup;
+        //tempTup.count = temp;
+        for(int j = 0; j < 11; j++) {
+            tempTup.key[j] = config.sendVec[config.world_rank][i].key[j];
+        }
+        config.printVec[i] = tempTup;
+    }*/
+
     if(config.world_rank == 0) {
-        tempOffset = config.sendVec[config.world_rank].size();
+        //tempOffset = config.sendVec[config.world_rank].size();
+        tempOffset = totalbytes;
         MPI_Isend(&tempOffset, 1, MPI_INT, config.world_rank + 1, 0, MPI_COMM_WORLD, &request);
     }
     else {
         MPI_Recv(&config.writeOffset, 1, MPI_INT, config.world_rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         if(config.world_rank != config.world_size-1) {
-            tempOffset = config.writeOffset + config.sendVec[config.world_rank].size();
+            //tempOffset = config.writeOffset + config.sendVec[config.world_rank].size();
+            tempOffset = config.writeOffset + totalbytes;
             MPI_Isend(&tempOffset, 1, MPI_INT, config.world_rank + 1, 0, MPI_COMM_WORLD, &request);
         }
     }
@@ -98,7 +153,11 @@ void collective_write() {
     std::cout << "Rank: " << config.world_rank << ", Has offset: " << config.writeOffset << ", Will write: " << config.sendVec[config.world_rank].size() << std::endl;
 	MPI_File_open(MPI_COMM_WORLD, config.outFile, (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &config.outFileHandler);
     //if(config.world_rank == 3) {
-    MPI_File_write_at(config.outFileHandler, config.writeOffset*16*sizeof(char), &config.sendVec[config.world_rank][0], config.sendVec[config.world_rank].size()*16, MPI_CHAR, MPI_STATUS_IGNORE);
+    //MPI_File_write_at(config.outFileHandler, config.writeOffset*14*sizeof(char), &print[0], config.sendVec[config.world_rank].size()*14, MPI_CHAR, MPI_STATUS_IGNORE);
+    MPI_File_write_at(config.outFileHandler, config.writeOffset*sizeof(char), &print[0], totalbytes, MPI_CHAR, MPI_STATUS_IGNORE);
+    //REAL MPI_File_write_at(config.outFileHandler, config.writeOffset*16*sizeof(char), &config.sendVec[config.world_rank][0], config.sendVec[config.world_rank].size()*16, MPI_CHAR, MPI_STATUS_IGNORE);
+    //MPI_File_write_at(config.outFileHandler, config.writeOffset*16*sizeof(char), &config.sendVec[config.world_rank][0], config.sendVec[config.world_rank].size()*4, MPI_INT, MPI_STATUS_IGNORE);
+    //MPI_File_write_at(config.outFileHandler, config.writeOffset*16*sizeof(char), &config.sendVec[config.world_rank][0], config.sendVec[config.world_rank].size(), config.struct_type, MPI_STATUS_IGNORE);
 
     //}
 }
@@ -167,7 +226,55 @@ int getHash(const char *word, size_t length) {
 
 
 void mapReduce() {
-    int localFileSize = (config.localFileCount / 10) + 1;
+    const char space[30] = "-=%?&•!·_,.'<>/:;\" \n\t";
+    char* token;
+    int in = 0;
+    std::vector<char*> buffer;
+    token = strtok(config.receiveBuffer, space);
+    while(token != NULL){
+        int looop = 0;
+        while(strlen(token)-looop > 10) {
+            char* newToken = (char*) malloc(11*sizeof(char));
+            for(int i = 0+looop; i < 10+looop; i++) {
+                newToken[i-looop] = token[i];
+            }
+            newToken[10] = 0;
+            reduce(newToken, 1);
+            looop += 10;
+        }
+        if(strlen(token)-looop > 0) {
+            char* lastToken = (char*) malloc(11*sizeof(char));
+            for(int i = 0; i < strlen(token)-looop; i++) {
+                lastToken[i] = token[i+looop];
+            }
+            for(int i = strlen(token)-looop; i < 10; i++) {
+                lastToken[i] = ' ';
+            }
+            lastToken[10] = 0;
+            reduce(lastToken, 1);
+        }
+        /*
+        char tempChar[10];
+        int loop = 0;
+        if(strlen(token) > 10) {
+            for(int i = 0; i < strlen(token); i++){
+                if(i % 10 == 0){
+                    reduce(tempChar);
+                    for(int j = 0; j < 10; j++){
+                        tempChar[j] = ' ';
+                    }
+                    loop++;
+                }
+                tempChar[i - 10*loop] = token[i];
+            }
+            reduce(token);
+        }else{
+            reduce(token);
+        }*/
+        token = strtok(NULL, space);
+    }
+
+    /*int localFileSize = (config.localFileCount / 10) + 1;
     for(int i = 0; i < localFileSize; i++) {
         char* temp = (char*) malloc(11*sizeof(char));
         if(i == localFileSize-1 && config.localFileCount % 10 != 0) {
@@ -181,7 +288,7 @@ void mapReduce() {
         }
         temp[10] = 0;
         reduce(temp, 1);
-    }
+    }*/
     return;
 }
 
@@ -194,6 +301,8 @@ void reduce(char* temp, int val) {
         for(int k = 0; k < 11; k++) {
             tempTuple.key[k] = temp[k];
         }
+        //sprintf(tempTuple.value, "%s%d", tempTuple.value, val);
+        //std::cout << tempTuple.value << " " << strlen(tempTuple.value) << std::endl;
         tempTuple.value = val;
         config.sendVec[newHash].push_back(tempTuple);
         //config.sendVec[newHash][config.sendVec[newHash].size()-1].key = temp;
@@ -204,6 +313,9 @@ void reduce(char* temp, int val) {
     } else {
         int index = config.realMap[strTmp];
         int newHash = getHash(temp, 10);
+        //int timmy = std::atoi(config.sendVec[newHash][index].value);
+        //int timmy += 1;
+        //config.sendVec[newHash][index].value;
         config.sendVec[newHash][index].value += val;
         //std::cout << config.it->first << " yay found it " << config.it->second << std::endl;
         //std::cout << "new value" << config.sendVec[newHash][index].value << std::endl;
