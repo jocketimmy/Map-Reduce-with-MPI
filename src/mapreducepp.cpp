@@ -3,6 +3,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <string>
+#include <stddef.h>
 
 #define SEED_LENGTH 65
 typedef uint64_t Hash;
@@ -33,6 +34,8 @@ struct Config {
     // Read buffer
     char *sendBuffer;
     char *receiveBuffer;
+    char *receiveBuffer2;
+    char *receiveBuffer3;
     char *last_buffer;
 
     // Ranks
@@ -55,7 +58,7 @@ void reduce(char*, int);
 void collective_read(char*, char*);
 void init(char*, char*);
 void cleanup();
-void mapReduce();
+void mapReduce(char*);
 void distribute();
 void collective_write();
 int getHash(const char*, size_t);
@@ -75,6 +78,7 @@ void collective_read(char *inFileHandler, char *outFile) {
 
     config.receiveBuffer = (char*) malloc(config.localFileCount * sizeof(char));
 
+
     MPI_Offset offset = config.MB * sizeof(char) * config.world_size;
     int loopCount = (config.totalFileSize / offset) + 1;
     for(int i = 0; i < loopCount; i++) {
@@ -83,6 +87,66 @@ void collective_read(char *inFileHandler, char *outFile) {
             handleInput(disp + (config.chunk * config.world_rank));
         }
     }
+
+    std::cout << "Did it work? " << config.sendVec[0].size() << " " << config.sendVec[1].size() << " " <<config.sendVec[2].size() <<" " << config.sendVec[3].size() << std::endl;
+
+    return;
+    //New stuff
+    if(config.totalFileSize > 3*config.MB*config.world_size) {
+        config.receiveBuffer2 = (char*) malloc(config.localFileCount * sizeof(char));
+        config.receiveBuffer3 = (char*) malloc(config.localFileCount * sizeof(char));
+        MPI_Request request[3];
+        //MPI_Status status;
+        int flags[3] = {-10};
+        MPI_Offset offset = config.MB * sizeof(char) * config.world_size;
+        int loopCount = (config.totalFileSize / offset) + 1;
+        int i = 0;
+
+        MPI_Offset disp = offset * i;
+        MPI_File_iread_at(config.inFileHandler, disp + (config.chunk * config.world_rank), config.receiveBuffer, config.localFileCount, MPI_CHAR, &request[0]);
+        i++;
+        disp = offset * i;
+        MPI_File_iread_at(config.inFileHandler, disp + (config.chunk * config.world_rank), config.receiveBuffer2, config.localFileCount, MPI_CHAR, &request[1]);
+        i++;
+        disp = offset * i;
+        MPI_File_iread_at(config.inFileHandler, disp + (config.chunk * config.world_rank), config.receiveBuffer3, config.localFileCount, MPI_CHAR, &request[2]);
+        i++;
+        disp = offset * i;
+        //if(disp + (config.chunk * config.world_rank) < config.totalFileSize) {
+
+        while(i < loopCount) {
+            MPI_Test(&request[0], &flags[0], MPI_STATUS_IGNORE);
+            MPI_Test(&request[1], &flags[1], MPI_STATUS_IGNORE);
+            MPI_Test(&request[2], &flags[2], MPI_STATUS_IGNORE);
+            if(flags[0]) {
+                mapReduce(config.receiveBuffer);
+                //if(disp < config.totalFileSize) {
+                    MPI_File_iread_at(config.inFileHandler, disp + (config.chunk * config.world_rank), config.receiveBuffer, config.localFileCount, MPI_CHAR, &request[0]);
+                    i++;
+                    disp = offset * i;
+                    flags[0] = 0;
+                /*}
+                else {
+                    //buffer1Done = true;
+                }*/
+            }
+            if(flags[1]) {
+                mapReduce(config.receiveBuffer2);
+                MPI_File_iread_at(config.inFileHandler, disp + (config.chunk * config.world_rank), config.receiveBuffer2, config.localFileCount, MPI_CHAR, &request[1]);
+                i++;
+                disp = offset * i;
+                flags[1] = 0;
+            }
+            if(flags[2]) {
+                mapReduce(config.receiveBuffer3);
+                MPI_File_iread_at(config.inFileHandler, disp + (config.chunk * config.world_rank), config.receiveBuffer3, config.localFileCount, MPI_CHAR, &request[2]);
+                i++;
+                disp = offset * i;
+                flags[2] = 0;
+            }
+        }
+    }
+    std::cout << "Did it work? " << config.sendVec[0].size()+config.sendVec[1].size() + config.sendVec[2].size() << " " << config.sendVec[3].size() << std::endl;
     //MPI_File_close(&config.inFileHandler);
     return;
 }
@@ -170,8 +234,10 @@ void handleInput(MPI_Offset offset) {
         count = (config.totalFileSize % config.chunk) / sizeof(char);
         config.localFileCount = count;
     }
+    std::cout << "READ A CHUNK HERE" << std::endl;
     MPI_File_read_at(config.inFileHandler, offset, config.receiveBuffer, config.localFileCount, MPI_CHAR, MPI_STATUS_IGNORE);
-    mapReduce();
+
+    mapReduce(config.receiveBuffer);
     return;
 }
 
@@ -225,12 +291,12 @@ int getHash(const char *word, size_t length) {
 }
 
 
-void mapReduce() {
+void mapReduce(char* receiveBuffer) {
     const char space[30] = "-=%?&•!·_,.'<>/:;\" \n\t";
     char* token;
-    int in = 0;
-    std::vector<char*> buffer;
-    token = strtok(config.receiveBuffer, space);
+    //int in = 0;
+    //std::vector<char*> buffer;
+    token = strtok(receiveBuffer, space);
     while(token != NULL){
         int looop = 0;
         while(strlen(token)-looop > 10) {
@@ -297,16 +363,19 @@ void reduce(char* temp, int val) {
     config.it = config.realMap.find(strTmp);
     if(config.it == config.realMap.end()) {
         int newHash = getHash(temp, 10);
-        Tuple tempTuple;
+        /*Tuple tempTuple;
         for(int k = 0; k < 11; k++) {
             tempTuple.key[k] = temp[k];
-        }
+        }*/
         //sprintf(tempTuple.value, "%s%d", tempTuple.value, val);
         //std::cout << tempTuple.value << " " << strlen(tempTuple.value) << std::endl;
-        tempTuple.value = val;
-        config.sendVec[newHash].push_back(tempTuple);
+        //tempTuple.value = val;
+        config.sendVec[newHash].emplace_back(Tuple());
         //config.sendVec[newHash][config.sendVec[newHash].size()-1].key = temp;
-        //config.sendVec[newHash][config.sendVec[newHash].size()-1].value = 1;
+        for(int k = 0; k < 11; k++) {
+            config.sendVec[newHash][config.sendVec[newHash].size()-1].key[k] = temp[k];
+        }
+        config.sendVec[newHash][config.sendVec[newHash].size()-1].value = val;
         config.realMap.insert({strTmp, config.sendVec[newHash].size()-1});
         //std::cout << config.sendVec[newHash][config.sendVec[newHash].size()-1].value << " NO you did not found it, you wanted: " << strTmp << std::endl;
 
@@ -346,6 +415,8 @@ void distribute() {
         MPI_Probe(i, config.world_rank, MPI_COMM_WORLD, &status[i]);
         //MPI_Get_count(&status[i], MPI_CHAR, &counts[i]);
         MPI_Get_count(&status[i], config.struct_type, &counts[i]);
+        std::cout << "RECEIVE DONE" << std::endl;
+
         if(counts[i] != 0) {
             //std::vector<Tuple> temp(counts[i] / 16);
             std::vector<Tuple> temp(counts[i]);
@@ -371,5 +442,7 @@ void distribute() {
             std::cout << " " << config.sendVec[config.world_rank][i].value << std::endl;
         }
     }*/
+    std::cout << "REDUCE DONE" << std::endl;
+
     return;
 }

@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
 	int opt;
 	int world_rank;
 	int repeat = 1;
-	void (*algorithm)() = &mapReduce;
+	//void (*algorithm)() = &mapReduce;
 
 	double avg_runtime = 0.0, prev_avg_runtime = 0.0, stddev_runtime = 0.0;
 	double start_time, end_time;
@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
 		switch (opt) {
 			case 'f':
 				if (world_rank == 0) fprintf(stderr, "Hard work work\n");
-				algorithm = &mapReduce;
+				//algorithm = &mapReduce;
 				break;
 			case 'r':
 				repeat = atoi(optarg);
@@ -44,19 +44,31 @@ int main(int argc, char *argv[]) {
 	}
 
 	//init(argv[optind], argv[optind + 1]);
+    MPI_Barrier(MPI_COMM_WORLD);
+	/*MPI_File inFileHandler
+    MPI_File_open(MPI_COMM_WORLD, argv[optind], (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &inFileHandler);
+	MPI_File_iread_at(inFileHandler, 1, &cha, 1, MPI_CHAR, &request1);
+    //std::cout << "request is " << request1 << std::endl;
+    MPI_Wait(&request1, &status);
+	*/
+	start_time = MPI_Wtime();
 	collective_read(argv[optind], argv[optind + 1]);
+    //MPI_Barrier(MPI_COMM_WORLD);
+	//distribute();
+    //MPI_Barrier(MPI_COMM_WORLD);
+	//collective_write();
+	end_time = MPI_Wtime();
     MPI_Barrier(MPI_COMM_WORLD);
-	distribute();
-    MPI_Barrier(MPI_COMM_WORLD);
-	collective_write();
+
+
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 	for (int i = 0; i < repeat; i++) {
-		MPI_Barrier(MPI_COMM_WORLD);
+		/*MPI_Barrier(MPI_COMM_WORLD);
 		start_time = MPI_Wtime();
 		//algorithm();
 		MPI_Barrier(MPI_COMM_WORLD);
-		end_time = MPI_Wtime();
+		end_time = MPI_Wtime();*/
 
 		if (world_rank == 0) {
 			printf("run %d: %f s\n", i, end_time - start_time);
