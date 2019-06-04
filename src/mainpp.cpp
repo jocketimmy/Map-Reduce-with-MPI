@@ -13,8 +13,6 @@ int main(int argc, char *argv[]) {
 	int opt;
 	int world_rank;
 	int repeat = 1;
-	//void (*algorithm)() = &mapReduce;
-
 	double avg_runtime = 0.0, prev_avg_runtime = 0.0, stddev_runtime = 0.0;
 	double start_time, end_time;
 
@@ -23,10 +21,6 @@ int main(int argc, char *argv[]) {
 
 	while ((opt = getopt(argc, argv, "cfr:")) != -1) {
 		switch (opt) {
-			case 'f':
-				if (world_rank == 0) fprintf(stderr, "Hard work work\n");
-				//algorithm = &mapReduce;
-				break;
 			case 'r':
 				repeat = atoi(optarg);
 				break;
@@ -43,33 +37,23 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 
-	//init(argv[optind], argv[optind + 1]);
-    MPI_Barrier(MPI_COMM_WORLD);
-	/*MPI_File inFileHandler
-    MPI_File_open(MPI_COMM_WORLD, argv[optind], (MPI_MODE_RDWR | MPI_MODE_CREATE), MPI_INFO_NULL, &inFileHandler);
-	MPI_File_iread_at(inFileHandler, 1, &cha, 1, MPI_CHAR, &request1);
-    //std::cout << "request is " << request1 << std::endl;
-    MPI_Wait(&request1, &status);
-	*/
-	start_time = MPI_Wtime();
-	collective_read(argv[optind], argv[optind + 1]);
-    //MPI_Barrier(MPI_COMM_WORLD);
-	//distribute();
-    //MPI_Barrier(MPI_COMM_WORLD);
-	//collective_write();
-	end_time = MPI_Wtime();
-    MPI_Barrier(MPI_COMM_WORLD);
-
-
-	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+	/*Warm up*/
+	MPI_Barrier(MPI_COMM_WORLD);
+	collective_read(argv[optind]);
+	distribute();
+	collective_write(argv[optind + 1]);
+	MPI_Barrier(MPI_COMM_WORLD);
+	cleanup();
 
 	for (int i = 0; i < repeat; i++) {
-		/*MPI_Barrier(MPI_COMM_WORLD);
-		start_time = MPI_Wtime();
-		//algorithm();
 		MPI_Barrier(MPI_COMM_WORLD);
-		end_time = MPI_Wtime();*/
-
+		start_time = MPI_Wtime();
+		collective_read(argv[optind]);
+		distribute();
+		collective_write(argv[optind + 1]);
+		MPI_Barrier(MPI_COMM_WORLD);
+		end_time = MPI_Wtime();
+		cleanup();
 		if (world_rank == 0) {
 			printf("run %d: %f s\n", i, end_time - start_time);
 		}
@@ -83,9 +67,7 @@ int main(int argc, char *argv[]) {
 		printf("duration\t= %f±%f\n", avg_runtime, stddev_runtime);
 	}
 
-	//Put cleanup func here
 	MPI_Finalize();
-
 	return 0;
 }
 
