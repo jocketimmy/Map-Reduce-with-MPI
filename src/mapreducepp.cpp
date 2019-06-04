@@ -74,18 +74,13 @@ void collective_read(char* inFile) {
 
     for(int i = 0; i < loopCount; i++) {
         std::cout << "RANK and loop " << config.world_rank << " "  << i << std::endl;
-        if(offset > totalFileSize - chunk && offset < totalFileSize) {
-            MPI_File_read_all(inFileHandler, config.receiveBuffer, 1, chunk_type, MPI_STATUS_IGNORE);
-            config.receiveBuffer = (char*) realloc(config.receiveBuffer, totalFileSize - offset);
-            mapReduce(config.receiveBuffer);
-            std::cout << "first if mapreduce done" << std::endl;
-        }
-        else {
-            MPI_File_read_all(inFileHandler, config.receiveBuffer, 1, chunk_type, MPI_STATUS_IGNORE);
-            if(offset < totalFileSize) {
-                mapReduce(config.receiveBuffer);
-                std::cout << "else mapreduce done" << std::endl;
+        MPI_File_read_all(inFileHandler, config.receiveBuffer, 1, chunk_type, MPI_STATUS_IGNORE);
+        if(offset < totalFileSize) {
+            if(offset > totalFileSize - chunk && offset < totalFileSize) {
+                config.receiveBuffer = (char*) realloc(config.receiveBuffer, totalFileSize - offset);
             }
+            mapReduce(config.receiveBuffer);
+            std::cout << "else mapreduce done" << std::endl;
         }
         offset += (config.world_size * chunk);
     }
@@ -252,25 +247,4 @@ void distribute() {
         }
     }
     return;
-    /*
-    for(int i = 0; i < config.sendVec.size(); i++) {
-        if(i == config.world_rank) continue;
-        MPI_Probe(i, config.world_rank, MPI_COMM_WORLD, &status[i]);
-        //MPI_Get_count(&status[i], MPI_CHAR, &counts[i]);
-        MPI_Get_count(&status[i], config.struct_type, &counts[i]);
-        std::cout << "RECEIVE DONE" << std::endl;
-
-        if(counts[i] != 0) {
-            //std::vector<Tuple> temp(counts[i] / 16);
-            std::vector<Tuple> temp(counts[i]);
-            MPI_Recv(&temp[0], counts[i], config.struct_type, i, config.world_rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            //MPI_Recv(&temp[0], counts[i], MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            //MPI_Irecv(void *buffer, int count, MPI_CHAR, i, config.world_rank, MPI_COMM_WORLD comm, MPI_STATUS_IGNORE);
-            for(int j = 0; j < temp.size(); j++) {
-                reduce(temp[j].key, temp[j].value);
-            }
-        }
-    }
-    std::cout << "REDUCE DONE" << std::endl;
-    return;*/
 }
