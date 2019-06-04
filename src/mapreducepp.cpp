@@ -22,7 +22,9 @@ struct Config {
     // Ranks
     int world_rank, world_size;
     //Data
-    int MB = 64*1024*1024;
+    MPI_Offset MB = 64*1024*1024;
+
+    //unsigned long long int MB = 64*1024*1024;
     char* receiveBuffer = (char*) malloc(MB * sizeof(char));
     std::unordered_map<std::string,int> realMap;
     std::unordered_map<std::string,int>::const_iterator it;
@@ -54,37 +56,30 @@ void collective_read(char* inFile) {
     MPI_Comm_rank(MPI_COMM_WORLD, &config.world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &config.world_size);
     config.sendVec.resize(config.world_size);
-    int MB = 64*1024*1024;
-    //config.receiveBuffer = (char*) malloc(MB * sizeof(char));
     MPI_File inFileHandler;
-    MPI_Offset totalFileSize, offset, chunk = MB * sizeof(char);
+    MPI_Offset totalFileSize, offset, chunk = config.MB * sizeof(char);
     MPI_Datatype view_type, chunk_type;
     MPI_File_open(MPI_COMM_WORLD, inFile, MPI_MODE_RDONLY, MPI_INFO_NULL, &inFileHandler);
     MPI_File_get_size(inFileHandler, &totalFileSize);
-    MPI_Type_contiguous(MB, MPI_CHAR, &chunk_type);
-    MPI_Type_create_resized(chunk_type, 0, MB*config.world_size, &view_type);
+    MPI_Type_contiguous(config.MB, MPI_CHAR, &chunk_type);
+    MPI_Type_create_resized(chunk_type, 0, config.MB*config.world_size, &view_type);
     MPI_Type_commit(&chunk_type);
     MPI_Type_commit(&view_type);
-    MPI_File_set_view(inFileHandler, MB*config.world_rank, chunk_type, view_type, "native", MPI_INFO_NULL);
-    std::cout << "world size  " <<  config.world_size <<std::endl;
+    MPI_File_set_view(inFileHandler, config.MB*config.world_rank, chunk_type, view_type, "native", MPI_INFO_NULL);
 
     offset = (config.world_rank * chunk);
     int loopCount = (totalFileSize / (config.world_size*chunk)) + 1;
-    std::cout << "looop count " <<  loopCount <<std::endl;
 
     for(int i = 0; i < loopCount; i++) {
-        std::cout << "RANK and loop " << config.world_rank << " "  << i << std::endl;
         MPI_File_read_all(inFileHandler, config.receiveBuffer, 1, chunk_type, MPI_STATUS_IGNORE);
         if(offset < totalFileSize) {
             if(offset > totalFileSize - chunk && offset < totalFileSize) {
                 config.receiveBuffer = (char*) realloc(config.receiveBuffer, totalFileSize - offset);
             }
             mapReduce(config.receiveBuffer);
-            std::cout << "else mapreduce done" << std::endl;
         }
         offset += (config.world_size * chunk);
     }
-    std::cout << "READ DONE" << std::endl;
 	MPI_File_close(&inFileHandler);
     return;
 }
@@ -150,17 +145,15 @@ int getHash(const char *word, size_t length) {
 
 char* newToken = (char*) malloc(11*sizeof(char));
 char* lastToken = (char*) malloc(11*sizeof(char));
+const char space[33] = "+-#~()[]-=%><?&•!·_,.'/:;\" \n\t";
+
 
 void mapReduce(char* receiveBuffer) {
-    const char space[33] = "+-#~()[]-=%><?&•!·_,.'/:;\" \n\t";
-    //const char space[33] = "•!·_,.'/:;\" \n\t";
-
     char* token;
     token = strtok(receiveBuffer, space);
     while(token != NULL){
         int looop = 0;
         while(strlen(token)-looop > 10) {
-            //char* newToken = (char*) malloc(11*sizeof(char));
             for(int i = 0+looop; i < 10+looop; i++) {
                 newToken[i-looop] = token[i];
             }
@@ -169,7 +162,6 @@ void mapReduce(char* receiveBuffer) {
             looop += 10;
         }
         if(strlen(token)-looop > 0) {
-            //char* lastToken = (char*) malloc(11*sizeof(char));
             for(int i = 0; i < strlen(token)-looop; i++) {
                 lastToken[i] = token[i+looop];
             }
@@ -185,8 +177,6 @@ void mapReduce(char* receiveBuffer) {
 }
 
 void reduce(char* temp, int val) {
-    //std::cout << "REDUCE" << std::endl;
-
     std::string strTmp(temp);
     config.it = config.realMap.find(strTmp);
     if(config.it == config.realMap.end()) {
