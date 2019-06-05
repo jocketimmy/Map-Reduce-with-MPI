@@ -26,6 +26,7 @@ struct Config {
 
     //unsigned long long int MB = 64*1024*1024;
     char* receiveBuffer = (char*) malloc(MB * sizeof(char));
+    char* receiveBuffer2 = (char*) malloc(MB * sizeof(char));
     std::unordered_map<std::string,int> realMap;
     std::unordered_map<std::string,int>::const_iterator it;
     std::vector<std::vector<Tuple> > sendVec;
@@ -68,17 +69,54 @@ void collective_read(char* inFile) {
     MPI_File_set_view(inFileHandler, config.MB*config.world_rank, chunk_type, view_type, "native", MPI_INFO_NULL);
 
     offset = (config.world_rank * chunk);
-    int loopCount = (totalFileSize / (config.world_size*chunk)) + 1;
-
-    for(int i = 0; i < loopCount; i++) {
+    //int loopCount = (totalFileSize / (config.world_size*chunk)) + 1;
+    /*for(int i = 0; i < loopCount; i++) {
         MPI_File_read_all(inFileHandler, config.receiveBuffer, 1, chunk_type, MPI_STATUS_IGNORE);
         if(offset < totalFileSize) {
-            if(offset > totalFileSize - chunk && offset < totalFileSize) {
+            if(offset > totalFileSize - chunk) {
                 config.receiveBuffer = (char*) realloc(config.receiveBuffer, totalFileSize - offset);
             }
             mapReduce(config.receiveBuffer);
+            if(offset > totalFileSize - chunk) {
+               config.receiveBuffer = (char*) realloc(config.receiveBuffer, chunk);
+            }
         }
         offset += (config.world_size * chunk);
+    }
+	MPI_File_close(&inFileHandler);
+    return;
+    */
+
+    MPI_Request request;
+    int flag = 0;
+    int loopCount = ((totalFileSize / (config.world_size*chunk)) + 1);
+    MPI_File_iread_all(inFileHandler, config.receiveBuffer, 1, chunk_type, &request);
+    int currentBuffer = 0;
+    for(int i = 0; i < loopCount;) {
+        MPI_Test(&request, &flag, MPI_STATUS_IGNORE);
+        if(flag) {
+            if(currentBuffer == 0) {
+                MPI_File_iread_all(inFileHandler, config.receiveBuffer2, 1, chunk_type, &request);
+                if(offset < totalFileSize) {
+                    if(offset > totalFileSize - chunk) {
+                        config.receiveBuffer = (char*) realloc(config.receiveBuffer, totalFileSize - offset);
+                    }
+                    mapReduce(config.receiveBuffer);
+                    currentBuffer = 1;
+                }
+            } else {
+                MPI_File_iread_all(inFileHandler, config.receiveBuffer, 1, chunk_type, &request);
+                if(offset < totalFileSize) {
+                    if(offset > totalFileSize - chunk) {
+                        config.receiveBuffer2 = (char*) realloc(config.receiveBuffer2, totalFileSize - offset);
+                    }
+                    mapReduce(config.receiveBuffer2);
+                    currentBuffer = 0;
+                }
+            }
+            i++;
+            offset += (config.world_size * chunk);
+        }
     }
 	MPI_File_close(&inFileHandler);
     return;
@@ -128,6 +166,8 @@ void collective_write(char* outFile) {
 void cleanup() {
     config.realMap.clear();
     config.sendVec.clear();
+    config.receiveBuffer = (char*) realloc(config.receiveBuffer, config.MB * sizeof(char));
+    config.receiveBuffer2 = (char*) realloc(config.receiveBuffer2, config.MB * sizeof(char));
     return;
 }
 
