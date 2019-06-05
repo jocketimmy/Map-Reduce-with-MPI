@@ -69,8 +69,11 @@ void collective_read(char* inFile) {
     MPI_File_set_view(inFileHandler, config.MB*config.world_rank, chunk_type, view_type, "native", MPI_INFO_NULL);
 
     offset = (config.world_rank * chunk);
-    //int loopCount = (totalFileSize / (config.world_size*chunk)) + 1;
-    /*for(int i = 0; i < loopCount; i++) {
+    int loopCount = (totalFileSize / (config.world_size*chunk)) + 1;
+
+    /*
+    Code for blocking collective read used in the profling tool
+    for(int i = 0; i < loopCount; i++) {
         MPI_File_read_all(inFileHandler, config.receiveBuffer, 1, chunk_type, MPI_STATUS_IGNORE);
         if(offset < totalFileSize) {
             if(offset > totalFileSize - chunk) {
@@ -89,7 +92,6 @@ void collective_read(char* inFile) {
 
     MPI_Request request;
     int flag = 0;
-    int loopCount = ((totalFileSize / (config.world_size*chunk)) + 1);
     MPI_File_iread_all(inFileHandler, config.receiveBuffer, 1, chunk_type, &request);
     int currentBuffer = 0;
     for(int i = 0; i < loopCount;) {
@@ -238,8 +240,14 @@ void distribute() {
     MPI_Datatype struct_type;
     MPI_Request request[config.world_size];
 	MPI_Status status[config.world_size];
-    int counts[config.world_size] = {0};
-    int flags[config.world_size] = {0};
+    int counts[config.world_size];
+    int handled[config.world_size];
+    int flags[config.world_size];
+    for(int i = 0; i < config.world_size; i++) {
+        counts[i] = 0;
+        flags[i] = 0;
+        handled[i] = 0;
+    }
     int blocksCount = 3;
     int blocksLength[3] = {11, 1, 1};
     MPI_Datatype types[3] = {MPI_CHAR, MPI_CHAR, MPI_INT};
@@ -254,7 +262,6 @@ void distribute() {
         if(i == config.world_rank) continue;
         MPI_Isend(&config.sendVec[i][0], config.sendVec[i].size(), struct_type, i, i, MPI_COMM_WORLD, &request[config.world_rank]);
     }
-    int handled[config.sendVec.size()] = {0};
     int loop = config.world_size-1;
     while(loop) {
         for(int i = 0; i < config.sendVec.size(); i++) {
